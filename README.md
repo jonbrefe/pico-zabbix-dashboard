@@ -34,9 +34,25 @@ This project needs the following on the Pico's filesystem:
 
 Flash MicroPython v1.28.0+ onto your Pico W. Download from [micropython.org](https://micropython.org/download/RPI_PICO_W/).
 
-### 2. Create config.py
+### 2. Install everything via `mip` (recommended)
 
-Copy `config.example.py` to `config.py` and fill in your values:
+Install the library and the dashboard with [pico-ctl](https://github.com/jonbrefe/pico-ctl):
+
+```bash
+# Install the display library (to /lib/)
+python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
+
+# Install the dashboard (main.py + config.example.py to /)
+python3 pico_ctl.py mip github:jonbrefe/pico-zabbix-dashboard --target /
+```
+
+### 3. Create and upload config.py
+
+Copy the example config, fill in your WiFi and Zabbix credentials, then upload:
+
+```bash
+cp config.example.py config.py
+```
 
 ```python
 Params = {
@@ -52,27 +68,11 @@ Params = {
 }
 ```
 
-> **Note**: `config.py` is git-ignored. Never commit credentials.
-
-### 3. Install everything via `mip` (recommended)
-
-Install the library and the dashboard in two commands:
-
 ```bash
-# Install the display library (to /lib/)
-python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
-
-# Install the dashboard (main.py + config.example.py to /)
-python3 pico_ctl.py mip github:jonbrefe/pico-zabbix-dashboard --target /
-```
-
-Then create your `config.py` locally from the example, fill in your credentials, and upload it:
-
-```bash
-cp config.example.py config.py
-# Edit config.py with your WiFi and Zabbix credentials
 python3 pico_ctl.py upload config.py /config.py
 ```
+
+> **Note**: `config.py` is git-ignored. Never commit credentials.
 
 ### Alternative: Manual install
 
