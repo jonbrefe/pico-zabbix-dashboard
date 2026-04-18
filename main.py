@@ -1,20 +1,26 @@
-"""Zabbix alert dashboard for Raspberry Pi Pico W with 2.9" e-paper display.
+"""Zabbix alert dashboard — 4-grayscale edition for Raspberry Pi Pico W.
 
-Polls the Zabbix JSON-RPC API for active problems and renders them as a
-compact table on a Waveshare SSD1680 e-paper.  The display refreshes only
-when the alert data changes (hash-based comparison).
+Polls the Zabbix JSON-RPC API for active problems and renders them as
+2-line cards on a Waveshare 2.9" e-paper using 4 gray levels for
+severity differentiation.  Portrait orientation (128×296) gives room
+for up to 13 alert cards.
+
+Boot sequence uses mono Display (fast refresh), then switches to
+Display4Gray for the main dashboard loop.
 
 Requires: pico_paper_lib, config.py with WiFi/Zabbix credentials.
 """
 from machine import Pin
 import network
-import urequests
 import ujson
 import time
 import gc
 import ntptime
-from pico_paper_lib import Display
-from pico_paper_lib.display import BLACK, WHITE
+from pico_paper_lib import Display, Display4Gray
+from pico_paper_lib.display import (
+    BLACK, WHITE,
+    GRAY_BLACK, GRAY_DARKGRAY, GRAY_LIGHTGRAY, GRAY_WHITE,
+)
 from pico_paper_lib.fonts import font_small, font_medium
 from config import Params
 
@@ -28,49 +34,48 @@ MAX_ALERTS = Params['MAX_ALERTS']
 UTC_OFFSET = Params['UTC_OFFSET']
 SORT_BY = Params.get('SORT_BY', 'age')  # 'age' or 'severity'
 
-# Partial-refresh safety: full refresh every N partial updates to clear ghosting
-PARTIAL_LIMIT = 5
-# Clock update interval in seconds (between Zabbix polls)
-CLOCK_INTERVAL = 60
-
-# Severity icons: 7 wide x 7 tall, column-major bitmaps (LSB=top row)
-# 0/1: Info - open circle
-# 2: Warning - triangle outline
-# 3: Average - filled diamond
-# 4: High - filled triangle
-# 5: Disaster - X in filled box
-SEV_ICONS = {
-    0: b'\x1c\x22\x41\x41\x41\x22\x1c',  # circle
-    1: b'\x1c\x22\x41\x41\x41\x22\x1c',  # circle
-    2: b'\x60\x58\x46\x41\x46\x58\x60',  # triangle outline
-    3: b'\x08\x1c\x3e\x7f\x3e\x1c\x08',  # filled diamond
-    4: b'\x60\x78\x7e\x7f\x7e\x78\x60',  # filled triangle
-    5: b'\x7f\x63\x55\x49\x55\x63\x7f',  # X in box
-}
-
-# Display: 296 x 128 landscape (from Display object)
-W = 296
-H = 128
+# Portrait dimensions (128 × 296)
+W = 128
+H = 296
 
 # Layout constants (5x7 font: 6px/char wide, 9px row height)
-CW = font_small.cell_w
 RH = 9
-# Column positions
-COL_SEV = 1
-COL_HOST = 10
-COL_NAME = 76
-COL_AGE = W - 36
-# Max chars per column
-HOST_MAX = 10
-NAME_MAX = 30
-AGE_MAX = 5
+HEADER_H = 11       # header bar
+STATUS_Y = 12       # status line y
+DATA_Y = 22         # first alert card y
+CARD_H = 19         # 2 lines (9+9) + 1px separator per card
+FOOTER_Y = H - 10   # 286
+MAX_CARDS = (FOOTER_Y - DATA_Y) // CARD_H  # 13
 
-# Column widths for layout
-_HOST_W = COL_NAME - COL_HOST       # 66
-_NAME_W = COL_AGE - COL_NAME        # 184
-_AGE_W = W - COL_AGE                # 36
+# Card column positions
+COL_ICON = 1        # severity icon x
+COL_TEXT = 10       # host / problem text x
+HOST_MAX = 14       # max chars for host (line 1)
+PROB_MAX = 19       # max chars for problem (line 2)
+AGE_MAX = 4         # max chars for age
 
-# Severity labels for badges
+# Severity → gray level for icon and text
+SEV_ICON_COLOR = {
+    0: GRAY_LIGHTGRAY, 1: GRAY_LIGHTGRAY,
+    2: GRAY_DARKGRAY,  3: GRAY_DARKGRAY,
+    4: GRAY_BLACK,      5: GRAY_BLACK,
+}
+SEV_TEXT_COLOR = {
+    0: GRAY_LIGHTGRAY, 1: GRAY_LIGHTGRAY,
+    2: GRAY_DARKGRAY,  3: GRAY_DARKGRAY,
+    4: GRAY_BLACK,      5: GRAY_BLACK,
+}
+
+# Severity icons: 7×7 column-major bitmaps (LSB=top row)
+SEV_ICONS = {
+    0: b'\x1c\x22\x41\x41\x41\x22\x1c',  # circle (info)
+    1: b'\x1c\x22\x41\x41\x41\x22\x1c',  # circle (info)
+    2: b'\x60\x58\x46\x41\x46\x58\x60',  # triangle outline (warn)
+    3: b'\x08\x1c\x3e\x7f\x3e\x1c\x08',  # filled diamond (avg)
+    4: b'\x60\x78\x7e\x7f\x7e\x78\x60',  # filled triangle (high)
+    5: b'\x7f\x63\x55\x49\x55\x63\x7f',  # X in box (disaster)
+}
+
 SEV_LABELS = {0: 'Info', 1: 'Info', 2: 'Warn', 3: 'Avg', 4: 'High', 5: 'DISA'}
 
 
@@ -119,12 +124,7 @@ def zabbix_api(method, params):
         'params': params,
         'id': 1
     })
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + ZABBIX_TOKEN
-    }
     try:
-        # Parse host/port from URL for raw socket with timeout
         url = ZABBIX_URL
         proto, _, host_path = url.split('/', 2)
         host_port, path = host_path.split('/', 1)
@@ -143,7 +143,6 @@ def zabbix_api(method, params):
         s.send(req.encode())
         s.send(body)
 
-        # Read response
         resp = b''
         while True:
             chunk = s.recv(1024)
@@ -152,7 +151,6 @@ def zabbix_api(method, params):
             resp += chunk
         s.close()
 
-        # Split headers and body
         parts = resp.split(b'\r\n\r\n', 1)
         data = ujson.loads(parts[1] if len(parts) > 1 else parts[0])
         if 'error' in data:
@@ -165,11 +163,7 @@ def zabbix_api(method, params):
 
 
 def fetch_problems():
-    """Fetch active problems from Zabbix, sorted by SORT_BY config.
-
-    Returns a list of problem dicts, or None on API error.
-    Zabbix 7.0 only supports single sortfield, so we sort client-side.
-    """
+    """Fetch active problems from Zabbix, sorted by SORT_BY config."""
     result = zabbix_api('problem.get', {
         'output': ['eventid', 'name', 'severity', 'clock', 'acknowledged'],
         'recent': True,
@@ -188,7 +182,7 @@ def fetch_problems():
 
 
 def fetch_host_for_events(event_ids):
-    """Map event IDs to hostnames via Zabbix event.get. Returns {eventid: hostname}."""
+    """Map event IDs to hostnames via Zabbix event.get."""
     if not event_ids:
         return {}
     result = zabbix_api('event.get', {
@@ -208,8 +202,7 @@ def fetch_host_for_events(event_ids):
 def time_ago(clock_str):
     """Convert Zabbix Unix timestamp to human-readable age."""
     try:
-        now_unix = time.time()
-        diff = now_unix - int(clock_str)
+        diff = time.time() - int(clock_str)
     except:
         return '?'
     if diff < 0:
@@ -217,128 +210,111 @@ def time_ago(clock_str):
     if diff < 120:
         return str(int(diff)) + 's'
     elif diff < 7200:
-        return str(int(diff // 60)) + 'min'
+        return str(int(diff // 60)) + 'm'
     elif diff < 172800:
-        return str(int(diff // 3600)) + 'hr'
+        return str(int(diff // 3600)) + 'h'
     else:
-        d = int(diff // 86400)
-        return str(d) + 'dy'
+        return str(int(diff // 86400)) + 'd'
 
 
-def draw_header(d, ip, n_problems, error=None):
-    """Draw the inverted header bar with title, alert count, IP, and time."""
-    # Black header bar
-    d.fill_rect(0, 0, W, 11, BLACK)
-    d.text('ZABBIX', 2, 2, WHITE, font=font_medium)
+# ------------------------------------------------------------------
+# 4-gray drawing helpers (portrait 128×296)
+# ------------------------------------------------------------------
+
+def draw_header(g, ip, n_problems, error=None):
+    """Draw header bar + status line on the 4-gray display."""
+    g.fill_rect(0, 0, W, HEADER_H, GRAY_BLACK)
+    g.text('ZABBIX', 2, 2, GRAY_WHITE, font=font_medium)
 
     if error:
-        d.text(error, 56, 2, WHITE)
+        g.text(error, 2, STATUS_Y, GRAY_BLACK)
     else:
-        # Alert count badge
-        count_text = str(n_problems) + ' active'
-        d.text(count_text, W - font_medium.text_width(count_text) - 2, 2, WHITE, font=font_medium)
+        count = str(n_problems) + ' act'
+        g.text_right(count, W - 2, 2, GRAY_WHITE, font=font_medium)
 
-    # Status line: IP left, last-update time right
-    y = 13
-    d.text(ip, 2, y)
+    # Status line: IP left, time right
+    g.text(ip, 2, STATUS_Y, GRAY_DARKGRAY)
     t = local_time()
-    ts = 'upd {:02d}:{:02d}'.format(t[3], t[4])
-    d.text_right(ts, W - 1, y)
-    d.hline(0, y + 8, W)
+    ts = '{:02d}:{:02d}'.format(t[3], t[4])
+    g.text_right(ts, W - 2, STATUS_Y, GRAY_DARKGRAY)
+
+    # Divider
+    g.hline(0, DATA_Y - 1, W, GRAY_BLACK)
 
 
-def draw_col_headers(d, y):
-    """Draw inverted column header bar at y."""
-    d.fill_rect(0, y, W, RH, BLACK)
-    d.text_in_rect('Host', COL_HOST, y, _HOST_W, RH, WHITE, align='center', valign='middle')
-    d.text_in_rect('Problem', COL_NAME, y, _NAME_W, RH, WHITE, align='center', valign='middle')
-    d.text_in_rect('Age', COL_AGE, y, _AGE_W, RH, WHITE, align='center', valign='middle')
+def draw_alert_card(g, y, sev, host, name, age, ack):
+    """Draw one 2-line alert card at y position.
 
-
-def draw_alert_row(d, y, sev, host, name, age, ack, row_idx):
-    """Draw one alert row with severity icon, host, problem, age, and ACK badge."""
+    Line 1: severity icon + host name + age (right-aligned)
+    Line 2: problem name (indented)
+    """
     sev_int = int(sev) if isinstance(sev, str) else sev
+    icon_color = SEV_ICON_COLOR.get(sev_int, GRAY_LIGHTGRAY)
+    text_color = SEV_TEXT_COLOR.get(sev_int, GRAY_DARKGRAY)
 
-    # Draw severity icon
-    icon = SEV_ICONS.get(sev_int, SEV_ICONS[0])
-    d.icon(icon, COL_SEV, y + 1)
+    # Severity icon
+    icon_data = SEV_ICONS.get(sev_int, SEV_ICONS[0])
+    g.icon(icon_data, COL_ICON, y + 1, color=icon_color)
 
-    # Host — centered in column
-    h = host[:HOST_MAX]
-    d.text_in_rect(h, COL_HOST, y, _HOST_W, RH, align='center', valign='middle')
+    # Host name (line 1)
+    g.text(host[:HOST_MAX], COL_TEXT, y + 1, text_color)
 
-    # Problem name — left-aligned for readability
-    n = name[:NAME_MAX]
-    d.text(n, COL_NAME + 2, y + 1)
+    # Age (line 1, right-aligned)
+    g.text_right(age[:AGE_MAX], W - 2, y + 1, GRAY_DARKGRAY)
 
-    # Age — right-aligned
-    a = age[:AGE_MAX]
-    d.text_right(a, W - 2, y + 1)
-
-    # Acknowledged badge
+    # ACK badge
     if str(ack) == '1':
-        d.badge('ACK', COL_AGE - 22, y + 1)
+        aw = font_small.text_width(age[:AGE_MAX])
+        g.badge('A', W - aw - 16, y, GRAY_DARKGRAY)
+
+    # Problem name (line 2, indented)
+    g.text(name[:PROB_MAX], COL_TEXT, y + RH + 1, text_color)
+
+    # Card separator
+    g.hline(0, y + CARD_H - 1, W, GRAY_LIGHTGRAY)
 
 
-def draw_footer(d, overflow=0):
-    """Draw a footer bar with memory info, centered clock, and overflow count."""
+def draw_footer(g, overflow=0):
+    """Draw footer bar with memory, clock, and overflow count."""
     gc.collect()
     mem = gc.mem_free()
-    y = H - 9
-    d.hline(0, y - 3, W)
-    d.text('mem:' + str(mem // 1024) + 'KB', 2, y)
-    # Clock in center
+    g.hline(0, FOOTER_Y - 2, W, GRAY_BLACK)
+    g.text('mem:' + str(mem // 1024) + 'K', 2, FOOTER_Y, GRAY_DARKGRAY)
+
     t = local_time()
     ts = '{:02d}:{:02d}'.format(t[3], t[4])
-    d.text_centered(ts, W // 2, y)
-    # Overflow count in bottom-right
+    g.text_centered(ts, W // 2, FOOTER_Y, GRAY_DARKGRAY)
+
     if overflow > 0:
-        d.text_right('+' + str(overflow) + ' more', W - 2, y)
+        g.text_right('+' + str(overflow), W - 2, FOOTER_Y, GRAY_DARKGRAY)
 
 
-# Clock region: center of footer where HH:MM is drawn
-_CLOCK_W = 5 * CW + 2        # 5 chars * cell_width + small margin
-_CLOCK_X = (W - _CLOCK_W) // 2
-_CLOCK_Y = H - 9
-_CLOCK_H = 9
-
-
-def update_clock(d):
-    """Partial-refresh only the clock region in the footer."""
-    t = local_time()
-    ts = '{:02d}:{:02d}'.format(t[3], t[4])
-    # Clear clock area and redraw
-    d.fill_rect(_CLOCK_X, _CLOCK_Y, _CLOCK_W, _CLOCK_H, WHITE)
-    d.text_centered(ts, W // 2, _CLOCK_Y)
-    d.refresh(full=False)
-    print('Clock:', ts)
-
-
-def draw_dashboard(d, ip, problems, hosts):
-    """Render the full dashboard: header, column headers, alert rows, and footer."""
-    d.clear()
+def draw_dashboard(g, ip, problems, hosts):
+    """Render the full 4-gray dashboard."""
+    g.clear()
 
     if not problems:
-        draw_header(d, ip, 0)
-        d.bordered_panel(30, 35, 236, 55, title='Status', radius=3)
-        d.text_centered('All clear!', W // 2, 55, font=font_medium)
-        d.text_centered('No active problems.', W // 2, 68)
-        draw_footer(d)
-        d.refresh()
+        draw_header(g, ip, 0)
+        # "All clear" panel
+        g.rect(10, 80, 108, 60, GRAY_DARKGRAY)
+        g.fill_rect(11, 81, 106, 11, GRAY_DARKGRAY)
+        g.text_centered('Status', W // 2, 82, GRAY_WHITE)
+        g.text_centered('All clear!', W // 2, 100, GRAY_BLACK, font=font_medium)
+        g.text_centered('No active', W // 2, 114, GRAY_DARKGRAY)
+        g.text_centered('problems.', W // 2, 124, GRAY_DARKGRAY)
+        draw_footer(g)
+        g.refresh()
         return
 
-    draw_header(d, ip, len(problems))
+    draw_header(g, ip, len(problems))
 
-    header_y = 23
-    draw_col_headers(d, header_y)
-
-    row_y = header_y + RH + 1
-    max_row_y = H - 12  # leave room for footer bar
-    row_idx = 0
+    card_y = DATA_Y
     overflow = 0
+    card_idx = 0
+
     for p in problems:
-        if row_y + RH > max_row_y:
-            overflow = len(problems) - row_idx
+        if card_y + CARD_H > FOOTER_Y - 2:
+            overflow = len(problems) - card_idx
             break
         eid = p.get('eventid', '')
         host = hosts.get(eid, '???')
@@ -346,45 +322,50 @@ def draw_dashboard(d, ip, problems, hosts):
         sev = p.get('severity', '0')
         age = time_ago(p.get('clock', '0'))
         ack = p.get('acknowledged', '0')
-        draw_alert_row(d, row_y, sev, host, name, age, ack, row_idx)
-        row_y += RH
-        row_idx += 1
+        draw_alert_card(g, card_y, sev, host, name, age, ack)
+        card_y += CARD_H
+        card_idx += 1
 
-    draw_footer(d, overflow=overflow)
-    d.refresh()
+    draw_footer(g, overflow=overflow)
+    g.refresh()
 
 
 def main():
-    """Boot sequence: WiFi connect, NTP sync, then poll/display loop."""
+    """Boot sequence: WiFi connect, NTP sync, then 4-gray poll/display loop."""
     led = Pin('LED', Pin.OUT)
     led.value(1)
 
+    # --- Boot screen (mono landscape — fast refresh) ---
     d = Display()
     d.clear()
-    d.fill_rect(0, 0, W, 11, BLACK)
+    d.fill_rect(0, 0, 296, 11, BLACK)
     d.text('ZABBIX', 2, 2, WHITE, font=font_medium)
-    d.text('booting...', W - font_medium.text_width('booting...') - 2, 2, WHITE, font=font_medium)
+    d.text('booting...', 296 - font_medium.text_width('booting...') - 2, 2, WHITE, font=font_medium)
     d.bordered_panel(30, 25, 236, 45, title='Connecting', radius=3)
-    d.text_centered('WiFi: ' + SSID, W // 2, 48)
+    d.text_centered('WiFi: ' + SSID, 148, 48)
     d.refresh()
 
     wlan, ip = wifi_connect()
     sync_ntp()
     led.value(0)
 
+    # Show connected screen
     d.clear()
-    d.fill_rect(0, 0, W, 11, BLACK)
+    d.fill_rect(0, 0, 296, 11, BLACK)
     d.text('ZABBIX', 2, 2, WHITE, font=font_medium)
     d.bordered_panel(30, 25, 236, 45, title='Connected', radius=3)
-    d.text_centered(ip, W // 2, 42)
-    d.text_centered('Fetching alerts...', W // 2, 55)
+    d.text_centered(ip, 148, 42)
+    d.text_centered('Switching to 4-gray...', 148, 55)
     d.refresh()
+
+    # Free mono display, switch to 4-gray portrait
+    del d
+    gc.collect()
+    print('Switching to 4-gray mode')
+    g = Display4Gray()
 
     last_data_hash = None
     consecutive_errors = 0
-    partial_count = 0          # partial refreshes since last full refresh
-    last_problems = None       # cached for forced full-refresh redraw
-    last_hosts = None
 
     while True:
         led.value(1)
@@ -396,14 +377,13 @@ def main():
             consecutive_errors += 1
             print('Fetch error #', consecutive_errors)
             if consecutive_errors >= 5:
-                d.clear()
-                draw_header(d, ip, 0, error='API ERR')
-                d.bordered_panel(30, 30, 236, 55, title='Error', radius=3)
-                d.text_centered('Cannot reach Zabbix API', W // 2, 50)
-                d.text_centered('Retrying every ' + str(POLL_INTERVAL) + 's...', W // 2, 62)
-                draw_footer(d)
-                d.refresh()
-                partial_count = 0
+                g.clear()
+                draw_header(g, ip, 0, error='API ERR')
+                g.text_centered('Cannot reach', W // 2, 100, GRAY_BLACK, font=font_medium)
+                g.text_centered('Zabbix API', W // 2, 115, GRAY_BLACK, font=font_medium)
+                g.text_centered('Retrying...', W // 2, 135, GRAY_DARKGRAY)
+                draw_footer(g)
+                g.refresh()
             led.value(0)
             time.sleep(POLL_INTERVAL)
             continue
@@ -415,38 +395,16 @@ def main():
 
         data_hash = str([(p['eventid'], p['severity']) for p in problems])
         if data_hash != last_data_hash:
-            draw_dashboard(d, ip, problems, hosts)
+            draw_dashboard(g, ip, problems, hosts)
             last_data_hash = data_hash
-            partial_count = 0  # full refresh resets counter
             print('Display updated:', len(problems), 'problems')
         else:
-            print('No change, skipping display refresh')
-
-        last_problems = problems
-        last_hosts = hosts
+            print('No change, skipping refresh')
 
         led.value(0)
         gc.collect()
         print('Free mem:', gc.mem_free())
-
-        # Between polls: tick the clock every CLOCK_INTERVAL seconds.
-        # After PARTIAL_LIMIT partial updates, force a full refresh.
-        elapsed = 0
-        while elapsed < POLL_INTERVAL:
-            time.sleep(CLOCK_INTERVAL)
-            elapsed += CLOCK_INTERVAL
-
-            if partial_count >= PARTIAL_LIMIT:
-                # Ghosting prevention: full redraw
-                print('Full refresh (ghosting prevention)')
-                if last_problems is not None:
-                    draw_dashboard(d, ip, last_problems, last_hosts)
-                else:
-                    d.refresh(full=True)
-                partial_count = 0
-            else:
-                update_clock(d)
-                partial_count += 1
+        time.sleep(POLL_INTERVAL)
 
 
 try:
