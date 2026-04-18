@@ -110,21 +110,21 @@ Give it read permissions for `problem.get` and `host.get`.
 ## Display Layout
 
 ```
-┌──────────────────────────────────────────────────┐
-│▓▓ZABBIX▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓12 active▓▓│ ← inverted header
-│ 192.168.27.80                      upd 13:18    │ ← IP + last fetch
-├──────────────────────────────────────────────────┤
-│▓▓▓Host▓▓▓▓▓Problem▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓Age▓▓│ ← column headers
-│ ◆ RT-AX88U  Interface eth4: Link down      8dy  │
-│ ▲ dbhost    Disk space < 10%               15m  │
-│ ○ mailsrv   SMTP service down          ACK 5m  │
-│ ...                                              │
-├──────────────────────────────────────────────────┤
-│ mem:119KB              16:27              +4 more │ ← footer + clock
-└──────────────────────────────────────────────────┘
++--------------------------------------------------+
+|##ZABBIX############################12 active#####| <- inverted header
+| 192.168.27.80                      upd 13:18     | <- IP + last fetch
++--------------------------------------------------+
+|###Host####Problem########################Age#####| <- column headers
+| * RT-AX88U  Interface eth4: Link down      8dy   |
+| ^ dbhost    Disk space < 10%               15m   |
+| o mailsrv   SMTP service down          ACK 5m   |
+| ...                                               |
++--------------------------------------------------+
+| mem:119KB              16:27              +4 more | <- footer + clock
++--------------------------------------------------+
 ```
 
-> `▓` = inverted (white-on-black) regions. The clock updates every 60s
+> `##` = inverted (white-on-black) regions. The clock updates every 60s
 > via partial refresh; a full refresh runs every 5 partial updates to
 > prevent ghosting.
 
