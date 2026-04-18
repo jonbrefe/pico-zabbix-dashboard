@@ -56,14 +56,15 @@ Params = {
 
 ### 3. Install everything via `mip` (recommended)
 
-This installs `main.py`, `config.example.py`, and the `pico-paper-lib` dependency in one step:
+Install the library and the dashboard in two commands:
 
 ```bash
+# Install the display library (to /lib/)
+python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
+
+# Install the dashboard (main.py + config.example.py to /)
 python3 pico_ctl.py mip github:jonbrefe/pico-zabbix-dashboard --target /
 ```
-
-> **Note**: `--target /` is required so `main.py` lands at the root (not `/lib/`).
-> The `pico-paper-lib` dependency is installed automatically to `/lib/`.
 
 Then create your `config.py` locally from the example, fill in your credentials, and upload it:
 

@@ -3,8 +3,5 @@
         ["main.py", "github:jonbrefe/pico-zabbix-dashboard/main.py"],
         ["config.example.py", "github:jonbrefe/pico-zabbix-dashboard/config.example.py"]
     ],
-    "deps": [
-        ["github:jonbrefe/pico-paper-lib", "0.1.0"]
-    ],
     "version": "0.1.0"
 }
