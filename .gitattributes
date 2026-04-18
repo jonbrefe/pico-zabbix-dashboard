@@ -1,0 +1,3 @@
+# Force LF line endings for scripts (prevents shebang issues in WSL/Linux)
+*.py text eol=lf
+*.sh text eol=lf

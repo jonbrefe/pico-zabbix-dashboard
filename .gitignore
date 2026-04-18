@@ -1,0 +1,9 @@
+# Credentials — DO NOT commit
+config.py
+
+# Local dev symlink
+pico_paper_lib
+
+__pycache__/
+*.pyc
+.DS_Store
