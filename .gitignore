@@ -6,4 +6,12 @@ pico_paper_lib
 
 __pycache__/
 *.pyc
+*.pyo
 .DS_Store
+
+# IDEs / editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

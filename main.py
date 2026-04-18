@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Jonathan Brenes
 """Zabbix alert dashboard — 4-grayscale edition for Raspberry Pi Pico W.
 
 Polls the Zabbix JSON-RPC API for active problems and renders them as
@@ -205,7 +207,7 @@ def time_ago(clock_str):
     """Convert Zabbix Unix timestamp to human-readable age."""
     try:
         diff = time.time() - int(clock_str)
-    except:
+    except (ValueError, TypeError):
         return '?'
     if diff < 0:
         return 'now'

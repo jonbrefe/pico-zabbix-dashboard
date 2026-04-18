@@ -1,4 +1,8 @@
 {
+    "description": "Zabbix alert dashboard for Raspberry Pi Pico W e-paper",
+    "author": "Jonathan Brenes",
+    "license": "MIT",
+    "homepage": "https://github.com/jonbrefe/pico-zabbix-dashboard",
     "urls": [
         ["main.py", "github:jonbrefe/pico-zabbix-dashboard/main.py"],
         ["config.example.py", "github:jonbrefe/pico-zabbix-dashboard/config.example.py"]

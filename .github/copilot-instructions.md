@@ -73,13 +73,20 @@ pico_paper_lib/     → Symlink to ../pico-paper-lib (display library)
 
 ## Installation
 
-Install via `mip` (requires WiFi on the Pico):
+For first-time setup on a blank Pico (no WiFi), upload directly via USB serial:
 
 ```bash
 # From pico-ctl/
+python3 pico_ctl.py upload --dir ../pico-paper-lib /lib/pico_paper_lib
+python3 pico_ctl.py upload ../pico-zabbix-dashboard/main.py /main.py
+python3 pico_ctl.py upload config.py /config.py
+```
+
+For updates when WiFi is already configured, `mip` works too:
+
+```bash
 python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
 python3 pico_ctl.py mip github:jonbrefe/pico-zabbix-dashboard --target /
-python3 pico_ctl.py upload config.py /config.py
 ```
 
 ## Testing

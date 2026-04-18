@@ -37,9 +37,25 @@ This project needs the following on the Pico's filesystem:
 
 Flash MicroPython v1.28.0+ onto your Pico W. Download from [micropython.org](https://micropython.org/download/RPI_PICO_W/).
 
-### 2. Install everything via `mip` (recommended)
+### 2. Install the display library and dashboard
 
-Install the library and the dashboard with [pico-ctl](https://github.com/jonbrefe/pico-ctl):
+#### Option A: Direct upload (works on a blank Pico — no WiFi needed)
+
+Upload via USB serial with [pico-ctl](https://github.com/jonbrefe/pico-ctl):
+
+```bash
+# Upload the display library
+python3 pico_ctl.py upload --dir ../pico-paper-lib /lib/pico_paper_lib
+
+# Upload the dashboard
+python3 pico_ctl.py upload ../pico-zabbix-dashboard/main.py /main.py
+```
+
+#### Option B: Install via `mip` (requires WiFi already configured on the Pico)
+
+> **Note:** `mip install` runs on the Pico itself — it needs a working WiFi connection
+> to download packages from GitHub. This will **not work on a blank Pico** that has no
+> `config.py` or WiFi setup yet. Use Option A for first-time setup.
 
 ```bash
 # Install the display library (to /lib/)
@@ -61,7 +77,6 @@ cp config.example.py config.py
 Params = {
     'WIFI_SSID': 'MyNetwork',
     'WIFI_Password': 'MyPassword',
-    'Port': 80,
     'ZABBIX_URL': 'http://192.168.1.10/zabbix/api_jsonrpc.php',
     'ZABBIX_TOKEN': 'your-zabbix-api-token',
     'POLL_INTERVAL': 60,
@@ -76,18 +91,6 @@ python3 pico_ctl.py upload config.py /config.py
 ```
 
 > **Note**: `config.py` is git-ignored. Never commit credentials.
-
-### Alternative: Manual install
-
-Install the library and upload files separately:
-
-```bash
-# Install pico-paper-lib
-python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
-
-# Upload dashboard files
-python3 pico_ctl.py upload ../pico-zabbix-dashboard/main.py /main.py ../pico-zabbix-dashboard/config.py /config.py
-```
 
 ### 4. Verify
 
