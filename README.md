@@ -54,39 +54,42 @@ Params = {
 
 > **Note**: `config.py` is git-ignored. Never commit credentials.
 
-### 3. Install pico-paper-lib on the Pico
+### 3. Install everything via `mip` (recommended)
 
-**Option A: `pico_ctl mip`** (recommended):
+This installs `main.py`, `config.example.py`, and the `pico-paper-lib` dependency in one step:
 
 ```bash
+python3 pico_ctl.py mip github:jonbrefe/pico-zabbix-dashboard --target /
+```
+
+> **Note**: `--target /` is required so `main.py` lands at the root (not `/lib/`).
+> The `pico-paper-lib` dependency is installed automatically to `/lib/`.
+
+Then copy the example config and fill in your values:
+
+```bash
+python3 pico_ctl.py exec "f=open('config.py','w');f.write(open('config.example.py').read());f.close();print('OK')"
+python3 pico_ctl.py edit /config.py
+```
+
+### Alternative: Manual install
+
+Install the library and upload files separately:
+
+```bash
+# Install pico-paper-lib
 python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
-```
 
-**Option B: `mip` on the Pico** (run in REPL after WiFi is available):
-
-```python
-import mip
-mip.install("github:jonbrefe/pico-paper-lib")
-```
-
-**Option C: Manual upload** with [pico-ctl](https://github.com/jonbrefe/pico-ctl):
-
-```bash
-python3 pico_ctl.py upload --dir ../pico-paper-lib /pico_paper_lib
-```
-
-### 4. Upload dashboard files
-
-Using [pico-ctl](https://github.com/jonbrefe/pico-ctl):
-
-```bash
+# Upload dashboard files
 python3 pico_ctl.py upload ../pico-zabbix-dashboard/main.py /main.py ../pico-zabbix-dashboard/config.py /config.py
+```
 
+### 4. Verify
+
+```bash
 # Verify it boots correctly
 python3 pico_ctl.py run main.py --timeout 300
 ```
-
-Or use any MicroPython file transfer tool (mpremote, Thonny, etc.).
 
 ### 5. Create a Zabbix API Token
 
