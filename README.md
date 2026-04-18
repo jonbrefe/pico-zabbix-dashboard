@@ -65,11 +65,12 @@ python3 pico_ctl.py mip github:jonbrefe/pico-zabbix-dashboard --target /
 > **Note**: `--target /` is required so `main.py` lands at the root (not `/lib/`).
 > The `pico-paper-lib` dependency is installed automatically to `/lib/`.
 
-Then copy the example config and fill in your values:
+Then create your `config.py` locally from the example, fill in your credentials, and upload it:
 
 ```bash
-python3 pico_ctl.py exec "f=open('config.py','w');f.write(open('config.example.py').read());f.close();print('OK')"
-python3 pico_ctl.py edit /config.py
+cp config.example.py config.py
+# Edit config.py with your WiFi and Zabbix credentials
+python3 pico_ctl.py upload config.py /config.py
 ```
 
 ### Alternative: Manual install
