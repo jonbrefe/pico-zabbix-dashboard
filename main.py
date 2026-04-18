@@ -1,9 +1,9 @@
 """Zabbix alert dashboard — 4-grayscale edition for Raspberry Pi Pico W.
 
 Polls the Zabbix JSON-RPC API for active problems and renders them as
-2-line cards on a Waveshare 2.9" e-paper using 4 gray levels for
-severity differentiation.  Portrait orientation (128×296) gives room
-for up to 13 alert cards.
+single-line cards on a Waveshare 2.9" e-paper using 4 gray levels for
+severity differentiation.  Landscape orientation (296×128) with the
+display mounted horizontally.
 
 Boot sequence uses mono Display (fast refresh), then switches to
 Display4Gray for the main dashboard loop.
@@ -34,36 +34,38 @@ MAX_ALERTS = Params['MAX_ALERTS']
 UTC_OFFSET = Params['UTC_OFFSET']
 SORT_BY = Params.get('SORT_BY', 'age')  # 'age' or 'severity'
 
-# Portrait dimensions (128 × 296)
-W = 128
-H = 296
+# Landscape dimensions (296 × 128)
+W = 296
+H = 128
 
 # Layout constants (5x7 font: 6px/char wide, 9px row height)
 RH = 9
 HEADER_H = 11       # header bar
 STATUS_Y = 12       # status line y
 DATA_Y = 22         # first alert card y
-CARD_H = 19         # 2 lines (9+9) + 1px separator per card
-FOOTER_Y = H - 10   # 286
-MAX_CARDS = (FOOTER_Y - DATA_Y) // CARD_H  # 13
+CARD_H = 11         # single-line card + 1px separator
+FOOTER_Y = H - 10   # 118
+MAX_CARDS = (FOOTER_Y - DATA_Y) // CARD_H  # ~8
 
-# Card column positions
+# Card column positions (landscape: 296px wide)
 COL_ICON = 1        # severity icon x
-COL_TEXT = 10       # host / problem text x
-HOST_MAX = 14       # max chars for host (line 1)
-PROB_MAX = 19       # max chars for problem (line 2)
-AGE_MAX = 4         # max chars for age
+COL_HOST = 10       # host name x
+COL_PROB = 100      # problem text x
+COL_AGE = W - 2     # age (right-aligned)
+HOST_MAX = 14       # max chars for host
+PROB_MAX = 25       # max chars for problem (leave room for age)
+AGE_MAX = 5         # max chars for age (e.g. '226d')
 
 # Severity → gray level for icon and text
 SEV_ICON_COLOR = {
-    0: GRAY_LIGHTGRAY, 1: GRAY_LIGHTGRAY,
+    0: GRAY_DARKGRAY,  1: GRAY_DARKGRAY,
     2: GRAY_DARKGRAY,  3: GRAY_DARKGRAY,
     4: GRAY_BLACK,      5: GRAY_BLACK,
 }
 SEV_TEXT_COLOR = {
-    0: GRAY_LIGHTGRAY, 1: GRAY_LIGHTGRAY,
-    2: GRAY_DARKGRAY,  3: GRAY_DARKGRAY,
-    4: GRAY_BLACK,      5: GRAY_BLACK,
+    0: GRAY_BLACK,  1: GRAY_BLACK,
+    2: GRAY_BLACK,  3: GRAY_BLACK,
+    4: GRAY_BLACK,  5: GRAY_BLACK,
 }
 
 # Severity icons: 7×7 column-major bitmaps (LSB=top row)
@@ -218,7 +220,7 @@ def time_ago(clock_str):
 
 
 # ------------------------------------------------------------------
-# 4-gray drawing helpers (portrait 128×296)
+# 4-gray drawing helpers (landscape 296×128)
 # ------------------------------------------------------------------
 
 def draw_header(g, ip, n_problems, error=None):
@@ -227,26 +229,22 @@ def draw_header(g, ip, n_problems, error=None):
     g.text('ZABBIX', 2, 2, GRAY_WHITE, font=font_medium)
 
     if error:
-        g.text(error, 2, STATUS_Y, GRAY_BLACK)
+        g.text(error, 70, 2, GRAY_WHITE, font=font_medium)
     else:
-        count = str(n_problems) + ' act'
+        count = str(n_problems) + ' alerts'
         g.text_right(count, W - 2, 2, GRAY_WHITE, font=font_medium)
 
-    # Status line: IP left, time right
-    g.text(ip, 2, STATUS_Y, GRAY_DARKGRAY)
-    t = local_time()
-    ts = '{:02d}:{:02d}'.format(t[3], t[4])
-    g.text_right(ts, W - 2, STATUS_Y, GRAY_DARKGRAY)
+    # Status line: IP left
+    g.text(ip, 2, STATUS_Y, GRAY_BLACK)
 
     # Divider
     g.hline(0, DATA_Y - 1, W, GRAY_BLACK)
 
 
 def draw_alert_card(g, y, sev, host, name, age, ack):
-    """Draw one 2-line alert card at y position.
+    """Draw one single-line alert card at y position.
 
-    Line 1: severity icon + host name + age (right-aligned)
-    Line 2: problem name (indented)
+    Layout: [icon] host | problem text ... age
     """
     sev_int = int(sev) if isinstance(sev, str) else sev
     icon_color = SEV_ICON_COLOR.get(sev_int, GRAY_LIGHTGRAY)
@@ -256,22 +254,23 @@ def draw_alert_card(g, y, sev, host, name, age, ack):
     icon_data = SEV_ICONS.get(sev_int, SEV_ICONS[0])
     g.icon(icon_data, COL_ICON, y + 1, color=icon_color)
 
-    # Host name (line 1)
-    g.text(host[:HOST_MAX], COL_TEXT, y + 1, text_color)
-
-    # Age (line 1, right-aligned)
-    g.text_right(age[:AGE_MAX], W - 2, y + 1, GRAY_DARKGRAY)
+    # Host name (truncate with ellipsis)
+    h = host[:HOST_MAX] if len(host) <= HOST_MAX else host[:HOST_MAX - 1].rstrip() + '.'
+    g.text(h, COL_HOST, y + 1, text_color)
 
     # ACK badge
     if str(ack) == '1':
-        aw = font_small.text_width(age[:AGE_MAX])
-        g.badge('A', W - aw - 16, y, GRAY_DARKGRAY)
+        g.badge('A', COL_PROB - 14, y, GRAY_DARKGRAY)
 
-    # Problem name (line 2, indented)
-    g.text(name[:PROB_MAX], COL_TEXT, y + RH + 1, text_color)
+    # Problem name (truncate with ellipsis)
+    n = name[:PROB_MAX] if len(name) <= PROB_MAX else name[:PROB_MAX - 1].rstrip() + '.'
+    g.text(n, COL_PROB, y + 1, text_color)
+
+    # Age (right-aligned)
+    g.text_right(age[:AGE_MAX], COL_AGE, y + 1, GRAY_BLACK)
 
     # Card separator
-    g.hline(0, y + CARD_H - 1, W, GRAY_LIGHTGRAY)
+    g.hline(0, y + CARD_H - 1, W, GRAY_DARKGRAY)
 
 
 def draw_footer(g, overflow=0):
@@ -279,14 +278,14 @@ def draw_footer(g, overflow=0):
     gc.collect()
     mem = gc.mem_free()
     g.hline(0, FOOTER_Y - 2, W, GRAY_BLACK)
-    g.text('mem:' + str(mem // 1024) + 'K', 2, FOOTER_Y, GRAY_DARKGRAY)
+    g.text('mem:' + str(mem // 1024) + 'K', 2, FOOTER_Y, GRAY_BLACK)
 
     t = local_time()
     ts = '{:02d}:{:02d}'.format(t[3], t[4])
-    g.text_centered(ts, W // 2, FOOTER_Y, GRAY_DARKGRAY)
+    g.text_centered(ts, W // 2, FOOTER_Y, GRAY_BLACK)
 
     if overflow > 0:
-        g.text_right('+' + str(overflow), W - 2, FOOTER_Y, GRAY_DARKGRAY)
+        g.text_right('+' + str(overflow) + ' more', W - 2, FOOTER_Y, GRAY_BLACK)
 
 
 def draw_dashboard(g, ip, problems, hosts):
@@ -296,12 +295,11 @@ def draw_dashboard(g, ip, problems, hosts):
     if not problems:
         draw_header(g, ip, 0)
         # "All clear" panel
-        g.rect(10, 80, 108, 60, GRAY_DARKGRAY)
-        g.fill_rect(11, 81, 106, 11, GRAY_DARKGRAY)
-        g.text_centered('Status', W // 2, 82, GRAY_WHITE)
-        g.text_centered('All clear!', W // 2, 100, GRAY_BLACK, font=font_medium)
-        g.text_centered('No active', W // 2, 114, GRAY_DARKGRAY)
-        g.text_centered('problems.', W // 2, 124, GRAY_DARKGRAY)
+        g.rect(60, 35, 176, 50, GRAY_DARKGRAY)
+        g.fill_rect(61, 36, 174, 11, GRAY_DARKGRAY)
+        g.text_centered('Status', W // 2, 37, GRAY_WHITE)
+        g.text_centered('All clear!', W // 2, 55, GRAY_BLACK, font=font_medium)
+        g.text_centered('No active problems.', W // 2, 70, GRAY_BLACK)
         draw_footer(g)
         g.refresh()
         return
@@ -358,7 +356,7 @@ def main():
     d.text_centered('Switching to 4-gray...', 148, 55)
     d.refresh()
 
-    # Free mono display, switch to 4-gray portrait
+    # Free mono display, switch to 4-gray landscape
     del d
     gc.collect()
     print('Switching to 4-gray mode')
@@ -379,9 +377,8 @@ def main():
             if consecutive_errors >= 5:
                 g.clear()
                 draw_header(g, ip, 0, error='API ERR')
-                g.text_centered('Cannot reach', W // 2, 100, GRAY_BLACK, font=font_medium)
-                g.text_centered('Zabbix API', W // 2, 115, GRAY_BLACK, font=font_medium)
-                g.text_centered('Retrying...', W // 2, 135, GRAY_DARKGRAY)
+                g.text_centered('Cannot reach Zabbix API', W // 2, 60, GRAY_BLACK, font=font_medium)
+                g.text_centered('Retrying...', W // 2, 80, GRAY_BLACK)
                 draw_footer(g)
                 g.refresh()
             led.value(0)

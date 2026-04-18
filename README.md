@@ -5,12 +5,15 @@ A **Raspberry Pi Pico W** e-paper dashboard that displays active Zabbix monitori
 ## Features
 
 - Pulls active problems from **Zabbix 7.0** via JSON-RPC API with Bearer token auth
-- Displays up to **12 alerts** with severity icon, host name, problem name, and age
+- **4-grayscale rendering** — black text, dark-gray severity icons, gray separators on white
+- Displays up to **8 alerts** in landscape (296×128) with severity icon, host, problem, and age
+- **Smart truncation** — text cut with `.` ellipsis, trailing spaces stripped for clean display
 - **Severity icons**: pixel-art bitmaps (circle, triangle, diamond, filled triangle, X-in-box)
 - **Sort modes**: by age (newest first) or severity (highest first)
 - **NTP time sync** with configurable UTC offset
 - **Hash-based change detection** — only refreshes the display when data changes
 - **Error resilience** — shows "API ERR" on display only after 5 consecutive failures
+- **Overflow indicator** — "+N more" in footer when alerts exceed screen capacity
 - Built on [pico-paper-lib](https://github.com/jonbrefe/pico-paper-lib) for display rendering
 
 ## Hardware
@@ -111,30 +114,30 @@ Give it read permissions for `problem.get` and `host.get`.
 
 ```
 +--------------------------------------------------+
-|##ZABBIX################################12 active#| <- inverted header
-| 192.168.27.80                           upd 13:18| <- IP + last fetch
+|##ZABBIX##############################12 alerts##| <- inverted header
+| 192.168.27.80                                    | <- IP address
 +--------------------------------------------------+
-|###Host####Problem########################Age#####| <- column headers
-| * RT-AX88U  Interface eth4: Link down      8dy   |
-| ^ dbhost    Disk space < 10%               15m   |
-| o mailsrv   SMTP service down           ACK 5m   |
+| * RT-AX88U  Interface eth4: Link down        9d  |
+| * RT-AX88U  Interface eth1: Link down       44d  |
+| * towerbridge  Zabbix agent is not avai.    96d  |
+| ^ endeavour Docker: Failed to fetch.       226d  |
 | ...                                              |
 +--------------------------------------------------+
-| mem:119KB              16:27             +4 more | <- footer + clock
+| mem:149K              13:51           +4 more    | <- footer
 +--------------------------------------------------+
 ```
 
-> `##` = inverted (white-on-black) regions. The clock updates every 60s
-> via partial refresh; a full refresh runs every 5 partial updates to
-> prevent ghosting.
+> `##` = inverted (white-on-black) regions.
+> Uses 4-grayscale mode (full refresh only, ~3s per update).
+> Display refreshes only when alert data changes.
 
-- **Sev column (1–9px)**: 7×7 pixel severity icons
-- **Host column (10–75px)**: Truncated hostname, centered
-- **Problem column (76–259px)**: Truncated problem description, left-aligned
-- **Age column (260–296px)**: Time since alert (e.g. `5m`, `2hr`, `3dy`), right-aligned
-- **ACK badge**: Acknowledged alerts show `ACK` badge next to age
-- **Status line**: `upd HH:MM` — last Zabbix API fetch time
-- **Footer clock**: `HH:MM` — live time, partial-refreshed every 60s
+- **Icon column (1–9px)**: 7×7 pixel severity icons (dark gray for low, black for high/disaster)
+- **Host column (10–99px)**: Hostname, max 14 chars, truncated with `.`
+- **Problem column (100–260px)**: Problem description, max 25 chars, truncated with `.`
+- **Age column (right-aligned)**: Time since alert (e.g. `5s`, `3m`, `2h`, `9d`), max 5 chars
+- **ACK badge**: Acknowledged alerts show `A` badge before the problem column
+- **Status line**: IP address of the Pico
+- **Footer**: `mem:XXXK` (left), `HH:MM` clock (center), `+N more` overflow (right)
 
 ## Configuration Options
 
@@ -150,7 +153,7 @@ Give it read permissions for `problem.get` and `host.get`.
 - **Epoch**: MicroPython v1.28.0 uses Unix epoch (1970), not the old 2000 epoch
 - **`const()`**: Values defined with `const()` cannot be imported across modules — plain variables are used instead
 - **Memory**: ~163KB free after loading all modules (plenty of headroom)
-- **Display refresh**: Full refresh takes ~3 seconds; only triggered when alert data changes
+- **Display refresh**: 4-gray full refresh takes ~3 seconds; only triggered when alert data changes
 
 ## Copilot Instructions
 

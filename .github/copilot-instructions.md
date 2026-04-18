@@ -36,12 +36,11 @@ pico_paper_lib/     → Symlink to ../pico-paper-lib (display library)
 
 ### main.py structure
 
-1. **Boot**: WiFi connect, NTP sync, show boot screen
-2. **Poll loop**: `fetch_problems()` → `fetch_host_for_events()` → hash check → `draw_dashboard()`
-3. **Clock sub-loop**: Between Zabbix polls, updates footer clock every `CLOCK_INTERVAL` (60s) via partial refresh
-4. **Ghosting prevention**: After `PARTIAL_LIMIT` (5) partial refreshes, forces a full redraw
-5. **Error handling**: 5 consecutive failures before showing API ERR on display
-6. **KeyboardInterrupt**: `main()` is wrapped in `try/except KeyboardInterrupt` so Ctrl+C returns to REPL
+1. **Boot**: WiFi connect, NTP sync, show boot screen (mono `Display` for fast refresh)
+2. **Switch**: Free mono display, create `Display4Gray` (landscape 296×128)
+3. **Poll loop**: `fetch_problems()` → `fetch_host_for_events()` → hash check → `draw_dashboard()`
+4. **Error handling**: 5 consecutive failures before showing API ERR on display
+5. **KeyboardInterrupt**: `main()` is wrapped in `try/except KeyboardInterrupt` so Ctrl+C returns to REPL
 
 ### API requests
 
@@ -53,16 +52,18 @@ pico_paper_lib/     → Symlink to ../pico-paper-lib (display library)
 
 - Zabbix 7.0 `problem.get` only supports a single `sortfield` — client-side sorting is used for multi-field sort (`SORT_BY` config: `'age'` or `'severity'`)
 - Severity icons are 7×7 column-major bitmaps in `SEV_ICONS` dict
-- Layout: COL_SEV=1, COL_HOST=10, COL_NAME=76, COL_AGE=W-36 (260), row height=9px
-- Column headers use inverted bar (fill_rect BLACK + white text)
-- Host text is centered within column; problem name is left-aligned
-- Acknowledged alerts show a `badge('ACK')` next to the age column
-- Status line shows IP on the left and `upd HH:MM` on the right (last Zabbix fetch time)
-- Footer shows `mem:XXkB` (left), `HH:MM` clock (center), and `+N more` overflow count (right)
-- Clock updates every 60s via partial refresh; full refresh every 5 partial updates to prevent ghosting
-- `_CLOCK_X`, `_CLOCK_Y`, `_CLOCK_W`, `_CLOCK_H` define the partial-refresh region for the clock
-- `update_clock(d)` clears the clock area and redraws with `d.refresh(full=False)`
-- `time_ago()` outputs compact age strings: `5s`, `3min`, `2hr`, `4dy`
+- Layout: COL_ICON=1, COL_HOST=10, COL_PROB=100, COL_AGE=W-2 (right-aligned), row height=11px (9px text + 1px separator + 1px padding)
+- No column headers row — maximizes space for alert cards (8 visible)
+- All text is rendered in `GRAY_BLACK`; grays are reserved for severity icons (`SEV_ICON_COLOR`) and separator lines
+- Text truncation uses `.` ellipsis with `.rstrip()` to avoid trailing-space artifacts (e.g. `"Failed to fetch."` not `"Failed to fetch ."`)
+- HOST_MAX=14 chars, PROB_MAX=25 chars, AGE_MAX=5 chars
+- Acknowledged alerts show a `badge('A')` before the problem column
+- Status line shows IP address only (left-aligned)
+- Footer shows `mem:XXXK` (left), `HH:MM` clock (center), and `+N more` overflow count (right)
+- Header shows `ZABBIX` (left, inverted) and `N alerts` (right, inverted)
+- `time_ago()` outputs compact age strings: `5s`, `3m`, `2h`, `4d`
+- 4-gray mode uses full refresh only (~3s); no partial refresh or clock sub-loop
+- Display only refreshes when the alert data hash changes
 
 ## Security
 
