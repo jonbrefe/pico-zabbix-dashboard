@@ -88,26 +88,31 @@ Give it read permissions for `problem.get` and `host.get`.
 ## Display Layout
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  ZABBIX                             12 active  │  ← inverted header (font_medium)
-│  192.168.27.80                  upd 13:18  │  ← IP + last update time
-│──────────────────────────────────────────────────────│
-│      Host          Problem                  Age  │  ← inverted column headers
-│  ◆  RT-AX88U  Interface eth4: Link down    8dy  │
-│  ▲  dbhost    Disk space < 10%            15m  │
-│  ○  mailsrv   SMTP service down        ACK 5m  │
-│  ...                                            │
-│──────────────────────────────────────────────────────│
-│  mem:119KB                                      │  ← footer
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│▓▓ZABBIX▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓12 active▓▓│ ← inverted header
+│ 192.168.27.80                      upd 13:18    │ ← IP + last fetch
+├──────────────────────────────────────────────────┤
+│▓▓▓Host▓▓▓▓▓Problem▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓Age▓▓│ ← column headers
+│ ◆ RT-AX88U  Interface eth4: Link down      8dy  │
+│ ▲ dbhost    Disk space < 10%               15m  │
+│ ○ mailsrv   SMTP service down          ACK 5m  │
+│ ...                                              │
+├──────────────────────────────────────────────────┤
+│ mem:119KB                               16:27   │ ← footer + clock
+└──────────────────────────────────────────────────┘
 ```
+
+> `▓` = inverted (white-on-black) regions. The clock updates every 60s
+> via partial refresh; a full refresh runs every 5 partial updates to
+> prevent ghosting.
 
 - **Sev column (1–9px)**: 7×7 pixel severity icons
 - **Host column (10–75px)**: Truncated hostname, centered
 - **Problem column (76–259px)**: Truncated problem description, left-aligned
 - **Age column (260–296px)**: Time since alert (e.g. `5m`, `2hr`, `3dy`), right-aligned
 - **ACK badge**: Acknowledged alerts show `ACK` badge next to age
-- **Status line**: `upd HH:MM` indicates the last time data was fetched from Zabbix
+- **Status line**: `upd HH:MM` — last Zabbix API fetch time
+- **Footer clock**: `HH:MM` — live time, partial-refreshed every 60s
 
 ## Configuration Options
 
