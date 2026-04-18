@@ -36,8 +36,8 @@ No automated tests — all testing requires a physical Pico W with a Waveshare 2
 Upload and monitor:
 
 ```bash
-python3 pico_ctl.py upload main.py /main.py
-python3 pico_ctl.py monitor
+pico_ctl upload main.py /main.py
+pico_ctl monitor
 ```
 
 ## Pull Requests

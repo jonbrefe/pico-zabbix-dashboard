@@ -45,10 +45,10 @@ Upload via USB serial with [pico-ctl](https://github.com/jonbrefe/pico-ctl):
 
 ```bash
 # Upload the display library
-python3 pico_ctl.py upload --dir ../pico-paper-lib /lib/pico_paper_lib
+pico_ctl upload --dir ../pico-paper-lib /lib/pico_paper_lib
 
 # Upload the dashboard
-python3 pico_ctl.py upload ../pico-zabbix-dashboard/main.py /main.py
+pico_ctl upload ../pico-zabbix-dashboard/main.py /main.py
 ```
 
 #### Option B: Install via `mip` (requires WiFi already configured on the Pico)
@@ -59,10 +59,10 @@ python3 pico_ctl.py upload ../pico-zabbix-dashboard/main.py /main.py
 
 ```bash
 # Install the display library (to /lib/)
-python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
+pico_ctl mip github:jonbrefe/pico-paper-lib
 
 # Install the dashboard (main.py + config.example.py to /)
-python3 pico_ctl.py mip github:jonbrefe/pico-zabbix-dashboard --target /
+pico_ctl mip github:jonbrefe/pico-zabbix-dashboard --target /
 ```
 
 ### 3. Create and upload config.py
@@ -87,7 +87,7 @@ Params = {
 ```
 
 ```bash
-python3 pico_ctl.py upload config.py /config.py
+pico_ctl upload config.py /config.py
 ```
 
 > **Note**: `config.py` is git-ignored. Never commit credentials.
@@ -96,7 +96,7 @@ python3 pico_ctl.py upload config.py /config.py
 
 ```bash
 # Verify it boots correctly
-python3 pico_ctl.py run main.py --timeout 300
+pico_ctl run main.py --timeout 300
 ```
 
 ### 5. Create a Zabbix API Token
