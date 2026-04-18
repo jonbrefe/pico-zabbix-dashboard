@@ -112,6 +112,7 @@ def wifi_connect():
 
 def zabbix_api(method, params):
     """Call Zabbix JSON-RPC API. Returns result dict or None on error."""
+    import socket
     payload = ujson.dumps({
         'jsonrpc': '2.0',
         'method': method,
@@ -123,9 +124,37 @@ def zabbix_api(method, params):
         'Authorization': 'Bearer ' + ZABBIX_TOKEN
     }
     try:
-        r = urequests.post(ZABBIX_URL, data=payload, headers=headers)
-        data = r.json()
-        r.close()
+        # Parse host/port from URL for raw socket with timeout
+        url = ZABBIX_URL
+        proto, _, host_path = url.split('/', 2)
+        host_port, path = host_path.split('/', 1)
+        host = host_port.split(':')[0] if ':' in host_port else host_port
+        port = int(host_port.split(':')[1]) if ':' in host_port else 80
+        path = '/' + path
+
+        addr = socket.getaddrinfo(host, port)[0][-1]
+        s = socket.socket()
+        s.settimeout(10)
+        s.connect(addr)
+
+        body = payload.encode()
+        req = 'POST {} HTTP/1.0\r\nHost: {}\r\nContent-Type: application/json\r\nAuthorization: Bearer {}\r\nContent-Length: {}\r\n\r\n'.format(
+            path, host, ZABBIX_TOKEN, len(body))
+        s.send(req.encode())
+        s.send(body)
+
+        # Read response
+        resp = b''
+        while True:
+            chunk = s.recv(1024)
+            if not chunk:
+                break
+            resp += chunk
+        s.close()
+
+        # Split headers and body
+        parts = resp.split(b'\r\n\r\n', 1)
+        data = ujson.loads(parts[1] if len(parts) > 1 else parts[0])
         if 'error' in data:
             print('Zabbix API error:', data['error'])
             return None
@@ -251,23 +280,26 @@ def draw_alert_row(d, y, sev, host, name, age, ack, row_idx):
         d.badge('ACK', COL_AGE - 22, y + 1)
 
 
-def draw_footer(d):
-    """Draw a footer bar with memory info and current time."""
+def draw_footer(d, overflow=0):
+    """Draw a footer bar with memory info, centered clock, and overflow count."""
     gc.collect()
     mem = gc.mem_free()
     y = H - 9
     d.hline(0, y - 3, W)
     d.text('mem:' + str(mem // 1024) + 'KB', 2, y)
-    # Clock in bottom-right
+    # Clock in center
     t = local_time()
     ts = '{:02d}:{:02d}'.format(t[3], t[4])
-    d.text_right(ts, W - 2, y)
+    d.text_centered(ts, W // 2, y)
+    # Overflow count in bottom-right
+    if overflow > 0:
+        d.text_right('+' + str(overflow) + ' more', W - 2, y)
 
 
-# Clock region: bottom-right corner where HH:MM is drawn
-_CLOCK_X = W - 5 * CW - 2   # 5 chars * cell_width, 2px margin
+# Clock region: center of footer where HH:MM is drawn
+_CLOCK_W = 5 * CW + 2        # 5 chars * cell_width + small margin
+_CLOCK_X = (W - _CLOCK_W) // 2
 _CLOCK_Y = H - 9
-_CLOCK_W = W - _CLOCK_X
 _CLOCK_H = 9
 
 
@@ -277,7 +309,7 @@ def update_clock(d):
     ts = '{:02d}:{:02d}'.format(t[3], t[4])
     # Clear clock area and redraw
     d.fill_rect(_CLOCK_X, _CLOCK_Y, _CLOCK_W, _CLOCK_H, WHITE)
-    d.text_right(ts, W - 2, _CLOCK_Y)
+    d.text_centered(ts, W // 2, _CLOCK_Y)
     d.refresh(full=False)
     print('Clock:', ts)
 
@@ -301,12 +333,12 @@ def draw_dashboard(d, ip, problems, hosts):
     draw_col_headers(d, header_y)
 
     row_y = header_y + RH + 1
-    max_row_y = H - 19  # leave room for overflow line + footer
+    max_row_y = H - 12  # leave room for footer bar
     row_idx = 0
+    overflow = 0
     for p in problems:
         if row_y + RH > max_row_y:
-            more = len(problems) - row_idx
-            d.text('+' + str(more) + ' more', W - 40, row_y)
+            overflow = len(problems) - row_idx
             break
         eid = p.get('eventid', '')
         host = hosts.get(eid, '???')
@@ -318,7 +350,7 @@ def draw_dashboard(d, ip, problems, hosts):
         row_y += RH
         row_idx += 1
 
-    draw_footer(d)
+    draw_footer(d, overflow=overflow)
     d.refresh()
 
 
@@ -417,4 +449,8 @@ def main():
                 partial_count += 1
 
 
-main()
+try:
+    main()
+except KeyboardInterrupt:
+    Pin('LED', Pin.OUT).value(0)
+    print('\nInterrupted – returning to REPL')

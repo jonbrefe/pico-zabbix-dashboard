@@ -54,15 +54,32 @@ Params = {
 
 > **Note**: `config.py` is git-ignored. Never commit credentials.
 
-### 3. Upload files to the Pico
+### 3. Install pico-paper-lib on the Pico
+
+**Option A: `mip` over WiFi** (easiest — run on the Pico after WiFi is available):
+
+```python
+import mip
+mip.install("github:jonbrefe/pico-paper-lib")
+```
+
+Or from the host via `mpremote`:
+
+```bash
+mpremote mip install github:jonbrefe/pico-paper-lib
+```
+
+**Option B: Manual upload** with [pico-ctl](https://github.com/jonbrefe/pico-ctl):
+
+```bash
+python3 pico_ctl.py upload --dir ../pico-paper-lib /pico_paper_lib
+```
+
+### 4. Upload dashboard files
 
 Using [pico-ctl](https://github.com/jonbrefe/pico-ctl):
 
 ```bash
-# Upload the display library
-python3 pico_ctl.py upload --dir ../pico-paper-lib /pico_paper_lib
-
-# Upload dashboard files
 python3 pico_ctl.py upload ../pico-zabbix-dashboard/main.py /main.py ../pico-zabbix-dashboard/config.py /config.py
 
 # Verify it boots correctly
@@ -71,7 +88,7 @@ python3 pico_ctl.py run main.py --timeout 300
 
 Or use any MicroPython file transfer tool (mpremote, Thonny, etc.).
 
-### 4. Create a Zabbix API Token
+### 5. Create a Zabbix API Token
 
 In Zabbix web UI: **User settings → API tokens → Create API token**.  
 Give it read permissions for `problem.get` and `host.get`.
@@ -98,7 +115,7 @@ Give it read permissions for `problem.get` and `host.get`.
 │ ○ mailsrv   SMTP service down          ACK 5m  │
 │ ...                                              │
 ├──────────────────────────────────────────────────┤
-│ mem:119KB                               16:27   │ ← footer + clock
+│ mem:119KB              16:27              +4 more │ ← footer + clock
 └──────────────────────────────────────────────────┘
 ```
 
