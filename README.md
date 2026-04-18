@@ -56,20 +56,20 @@ Params = {
 
 ### 3. Install pico-paper-lib on the Pico
 
-**Option A: `mip` over WiFi** (easiest — run on the Pico after WiFi is available):
+**Option A: `pico_ctl mip`** (recommended):
+
+```bash
+python3 pico_ctl.py mip github:jonbrefe/pico-paper-lib
+```
+
+**Option B: `mip` on the Pico** (run in REPL after WiFi is available):
 
 ```python
 import mip
 mip.install("github:jonbrefe/pico-paper-lib")
 ```
 
-Or from the host via `mpremote`:
-
-```bash
-mpremote mip install github:jonbrefe/pico-paper-lib
-```
-
-**Option B: Manual upload** with [pico-ctl](https://github.com/jonbrefe/pico-ctl):
+**Option C: Manual upload** with [pico-ctl](https://github.com/jonbrefe/pico-ctl):
 
 ```bash
 python3 pico_ctl.py upload --dir ../pico-paper-lib /pico_paper_lib
